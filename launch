@@ -1,0 +1,16 @@
+cp -r my_chatbot/nmt_data/ /tmp/nmt
+cp my_chatbot/standard_hparams/hparams.json /tmp/nmt/nmt_data/hparams
+python -W ignore -m my_chatbot.nmt \
+    --src=questions --tgt=answers \
+    --vocab_prefix=/tmp/nmt/nmt_data/vocab  \
+    --train_prefix=/tmp/nmt/nmt_data/train \
+    --dev_prefix=/tmp/nmt/nmt_data/dev  \
+    --test_prefix=/tmp/nmt/nmt_data/test \
+    --out_dir=/tmp/nmt/nmt_model \
+    --num_train_steps=12000 \
+    --steps_per_stats=100 \
+    --num_layers=2 \
+    --num_units=128 \
+    --dropout=0.2 \
+    --metrics=bleu\
+    --hparams_path=/tmp/nmt/nmt_data/hparams
