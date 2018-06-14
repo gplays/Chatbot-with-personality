@@ -9,4 +9,4 @@ args = parser.parse_args()
 
 
 from utils.data_utils import build_data
-build_data('Data', 'data2')
+build_data('Data', 'nmt_data')

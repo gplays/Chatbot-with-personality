@@ -110,9 +110,13 @@ def run_external_eval(infer_model, infer_sess, model_dir, hparams,
 
     dev_src_file = "%s.%s" % (hparams.dev_prefix, hparams.src)
     dev_tgt_file = "%s.%s" % (hparams.dev_prefix, hparams.tgt)
+    test_src_spk_file = "%s.%s" % (hparams.dev_prefix, hparams.src_spk)
+    test_tgt_spk_file = "%s.%s" % (hparams.dev_prefix, hparams.tgt_spk)
     dev_infer_iterator_feed_dict = {
         infer_model.src_placeholder: inference.load_data(dev_src_file),
         infer_model.batch_size_placeholder: hparams.infer_batch_size,
+        infer_model.src_spk_file_placeholder: test_src_spk_file,
+        infer_model.tgt_spk_file_placeholder: test_tgt_spk_file
         }
     dev_scores = _external_eval(
             loaded_infer_model,
@@ -131,9 +135,13 @@ def run_external_eval(infer_model, infer_sess, model_dir, hparams,
     if use_test_set and hparams.test_prefix:
         test_src_file = "%s.%s" % (hparams.test_prefix, hparams.src)
         test_tgt_file = "%s.%s" % (hparams.test_prefix, hparams.tgt)
+        test_src_spk_file = "%s.%s" % (hparams.test_prefix, hparams.src_spk)
+        test_tgt_spk_file = "%s.%s" % (hparams.test_prefix, hparams.tgt_spk)
         test_infer_iterator_feed_dict = {
             infer_model.src_placeholder: inference.load_data(test_src_file),
             infer_model.batch_size_placeholder: hparams.infer_batch_size,
+            infer_model.src_spk_file_placeholder: test_src_spk_file,
+            infer_model.tgt_spk_file_placeholder: test_tgt_spk_file
             }
         test_scores = _external_eval(
                 loaded_infer_model,
