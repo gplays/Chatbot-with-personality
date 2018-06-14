@@ -111,6 +111,7 @@ def create_test_iterator(hparams, mode):
     tgt_dataset = tf.data.Dataset.from_tensor_slices(
         tf.constant(["a b c b c", "a b c b"]))
     return (
+      # TODO changeto accomodate new inputs
         iterator_utils.get_iterator(
             src_dataset=src_dataset,
             tgt_dataset=tgt_dataset,
@@ -125,6 +126,7 @@ def create_test_iterator(hparams, mode):
         tgt_vocab_table)
   else:
     return (
+      # TODO changeto accomodate new inputs
         iterator_utils.get_infer_iterator(
             src_dataset=src_dataset,
             src_vocab_table=src_vocab_table,

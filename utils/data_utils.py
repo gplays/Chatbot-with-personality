@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from tensorflow.python.ops import lookup_ops
 
-from utils.vocab_utils import build_vocab_file
+from .vocab_utils import build_vocab_file
 
 DEBUG = True
 UNK_ID = 0
@@ -26,26 +26,34 @@ def clean_text(text):
 
     text = text.lower()
 
-    text = re.sub(r"i'm", "i am", text)
-    text = re.sub(r"he's", "he is", text)
-    text = re.sub(r"she's", "she is", text)
-    text = re.sub(r"it's", "it is", text)
-    text = re.sub(r"that's", "that is", text)
-    text = re.sub(r"what's", "that is", text)
-    text = re.sub(r"where's", "where is", text)
-    text = re.sub(r"how's", "how is", text)
-    text = re.sub(r"\'ll", " will", text)
-    text = re.sub(r"\'ve", " have", text)
-    text = re.sub(r"\'re", " are", text)
-    text = re.sub(r"\'d", " would", text)
-    text = re.sub(r"\'re", " are", text)
-    text = re.sub(r"won't", "will not", text)
-    text = re.sub(r"can't", "cannot", text)
-    text = re.sub(r"n't", " not", text)
-    text = re.sub(r"n'", "ng", text)
-    text = re.sub(r"'bout", "about", text)
-    text = re.sub(r"'til", "until", text)
-    text = re.sub(r"[-()\"#/@;:<>{}`+=~|.!?,]", "", text)
+    text = re.sub(r"<.>", "", text)
+    text = re.sub(r"<..>", "", text)
+
+    text = re.sub(r"n' ", "ng ", text)
+    text = re.sub(r"'bout ", " about ", text)
+    text = re.sub(r" til ", "until", text)
+    text = re.sub(r"['-()\"#/@;:<>{}`+=~|.!?,]", " ", text)
+
+    text = re.sub(r"  ", " ", text)
+    text = re.sub(r"  ", " ", text)
+    text = re.sub(r"  ", " ", text)
+
+    text = re.sub(r"i m ", "i am ", text)
+    text = re.sub(r"he s ", "he is ", text)
+    text = re.sub(r"she s ", "she is ", text)
+    text = re.sub(r"it s ", "it is ", text)
+    text = re.sub(r"that s ", "that is ", text)
+    text = re.sub(r"what s ", "that is ", text)
+    text = re.sub(r"where s ", "where is ", text)
+    text = re.sub(r"how s ", "how is ", text)
+    text = re.sub(r" ll ", " will ", text)
+    text = re.sub(r" ve ", " have ", text)
+    text = re.sub(r" re ", " are ", text)
+    text = re.sub(r" d ", " would ", text)
+    text = re.sub(r" re ", " are ", text)
+    text = re.sub(r"won t ", "will not ", text)
+    text = re.sub(r"can t ", "cannot ", text)
+    text = re.sub(r"n t ", " not ", text)
 
     return text
 
@@ -54,23 +62,22 @@ def load_data():
     pass
 
 
-def split_data(questions, answers, movies, ratio_test=0.2, ratio_dev=0.2):
-    dataset_size = len(questions)
-    m = Counter(movies)
-    ids = m.keys()
-    movie_set_size = len(ids)
+def split_data(movies, ratio_test=0.1, ratio_dev=0.1):
+    dataset_size = len(movies)
+    list_movie = list(set(movies))
+    list_movie = sample(list_movie, len(list_movie))
+    movie_set_size = len(list_movie)
     split_test = int(movie_set_size * ratio_test)
     split_dev = int(movie_set_size * (ratio_test + ratio_dev))
 
-    s = sample(ids, movie_set_size)
-
-    movie_test = {m: 1 for m in s[:split_test]}
-    movie_dev = {m: 1 for m in s[split_test:split_dev]}
-    movie_train = {m: 1 for m in s[split_dev:]}
-
+    test_ind= [i for i, m in enumerate(movies) if
+                 m in list_movie[:split_test]]
+    dev_ind = [i for i, m in enumerate(movies)
+               if m in list_movie[split_test:split_dev]]
+    train_ind = [i for i, m in enumerate(movies) if m in list_movie[split_dev:]]
     if DEBUG:
-        test_size = sum([c for _, c in m.items() if _ in movie_test])
-        dev_size = sum([c for _, c in m.items() if _ in movie_dev])
+        test_size = len(test_ind)
+        dev_size = len(dev_ind)
 
         real_ratio_test = test_size / dataset_size
         real_ratio_dev = dev_size / dataset_size
@@ -86,44 +93,30 @@ def split_data(questions, answers, movies, ratio_test=0.2, ratio_dev=0.2):
         print("{:.1f}% of the movies used for validation "
               "({:.1f}% of the entire dataset)".format(ratio_dev * 100,
                                                        real_ratio_dev * 100))
-        print("{:.1f}% of the movies used for validation "
+        print("{:.1f}% of the movies used for training "
               "({:.1f}% of the entire dataset)".format(ratio_train * 100,
                                                        real_ratio_training *
                                                        100))
 
-    train_q = []
-    train_a = []
-    dev_q = []
-    dev_a = []
-    test_q = []
-    test_a = []
-
-    for movie, question, answer in zip(movies, questions, answers):
-
-        if movie in movie_train:
-            train_a.append(answer)
-            train_q.append(question)
-        elif movie in movie_dev:
-            dev_a.append(answer)
-            dev_q.append(question)
-        else:
-            test_a.append(answer)
-            test_q.append(question)
-
-    return train_q, train_a, dev_q, dev_a, test_q, test_a
+    return train_ind, dev_ind, test_ind
 
 
 def build_data(input_dir, output_dir):
     lines, conv_lines = load_raw_data(input_dir)
-    questions, answers, movies = build_data_utterances(lines, conv_lines)
-    train_q, train_a, dev_q, dev_a, test_q, test_a = split_data(questions,
-                                                                answers, movies)
+    movies, dataset = build_data_utterances(lines, conv_lines)
+    train_ind, dev_ind, test_ind = split_data(movies)
 
-    write_data(train_q, train_a, "train", output_dir)
-    write_data(dev_q, dev_a, "dev", output_dir)
-    write_data(test_q, test_a, "test", output_dir)
+    for fold, ind in [("train", train_ind), ("dev", dev_ind),
+                      ("test", test_ind)]:
+        write_data(dataset[ind, 0], "questions", fold, output_dir)
+        write_data(dataset[ind, 1], "answers", fold, output_dir)
+        write_data(dataset[ind, 2], "q_speaker", fold, output_dir)
+        write_data(dataset[ind, 3], "a_speaker", fold, output_dir)
 
-    build_vocab_file(questions, answers, 'vocab', output_dir, threshold=10)
+    build_vocab_file(dataset[:, 0], dataset[:, 1], 'vocab', output_dir,
+                     threshold=10)
+    build_vocab_file(dataset[:, 2], dataset[:, 3], 'speakers', output_dir,
+                     threshold=4)
 
     return
 
@@ -152,7 +145,7 @@ def load_raw_data(input_dir, lines_file=None, conv_file=None):
 
 
 def build_data_utterances(lines, conv_lines, min_line_length=2,
-                          max_line_length=20, keep_locutor=False):
+                          max_line_length=20):
     """Build a list of question and a list of answers from lines and 
     conversations"""
     # Create a dictionary to map each line's id with its text
@@ -160,55 +153,28 @@ def build_data_utterances(lines, conv_lines, min_line_length=2,
     for line in lines:
         _line = line.split(' +++$+++ ')
         if len(_line) == 5:
-            id2line[_line[0].strip()] = clean_text(_line[4])
-
-    # Create a list of all of the conversations' lines' ids.
-    convs = []
-    speakers = []
-    movies = []
+            id2line[_line[0]] = (_line[1].strip(),
+                                 clean_text(_line[4]))
+    print(list(id2line)[:10])
+    questions = []
+    answers = []
+    questions_speaker = []
+    answers_speaker = []
+    movie_qa = []
 
     for line in conv_lines[:-1]:
         split_line = line.split(' +++$+++ ')
+        _utterances = split_line[-1][2:-2].split("', '")
 
-        _utterances = split_line[-1][1:-1]
-        _utterances = _utterances.replace("'", "")
-        _utterances = _utterances.replace(" ", "")
-        convs.append(_utterances.split(','))
+        question = _utterances[0]
+        for utt in _utterances[1:]:
+            questions_speaker.append(id2line[question][0])
+            answers_speaker.append(id2line[utt][0])
+            questions.append(id2line[question][1])
+            answers.append(id2line[utt][1])
+            movie_qa.append(split_line[2])
 
-        movies.append(split_line[2])
-
-        if keep_locutor:
-            speakers.appends([split_line[0], split_line[1]])
-
-    if DEBUG:
-        print("id2 line debug", [i for i in id2line][:5])
-        print("conv debug", convs[:5])
-        print("speakers debug", speakers[:5])
-        print("movies debug", movies[:5])
-        print()
-
-    # Sort the sentences into questions (inputs) and answers (targets)
-    questions = []
-    answers = []
-    movie_qa = []
-
-    for j in range(len(convs)):
-
-        conv = convs[j]
-        movie = movies[j]
-
-        if keep_locutor:
-            speaker = speakers[j]
-
-        for i in range(len(conv) - 1):
-            questions.append(id2line[conv[i]])
-            answers.append(id2line[conv[i + 1]])
-
-            if keep_locutor:
-                questions.append([speaker[i % 2], id2line[conv[i]]])
-                answers.append([speaker[(i + 1) % 2], id2line[conv[i + 1]]])
-
-            movie_qa.append(movie)
+            question = utt
 
     if DEBUG:
         # Check if we have loaded the data correctly
@@ -225,29 +191,11 @@ def build_data_utterances(lines, conv_lines, min_line_length=2,
         print(len(answers), " answers")
         print()
 
-    # Clean the data
-    clean_questions = []
-    for question in questions:
-        clean_questions.append(clean_text(question))
-
-    clean_answers = []
-    for answer in answers:
-        clean_answers.append(clean_text(answer))
-
-    if DEBUG:
-        # # Take a look at some of the data to ensure that it has been cleaned
-        # # well.
-        # limit = 0
-        # for i in range(limit, limit + 5):
-        #     print(clean_questions[i])
-        #     print(clean_answers[i])
-        #     print()
-
         # Find the length of sentences
         lengths = []
-        for question in clean_questions:
+        for question in questions:
             lengths.append(len(question.split()))
-        for answer in clean_answers:
+        for answer in answers:
             lengths.append(len(answer.split()))
 
         # Create a dataframe so that the values can be inspected
@@ -267,22 +215,21 @@ def build_data_utterances(lines, conv_lines, min_line_length=2,
     short_questions = []
     short_answers = []
     short_movies = []
+    short_questions_speaker = []
+    short_answers_speaker = []
 
-    for i in range(len(clean_questions)):
-        question = clean_questions[i]
-        answer = clean_answers[i]
-        movie = movie_qa[i]
-
-        if keep_locutor:
-            question = clean_questions[i][1]
-            answer = clean_answers[i][1]
+    for i in range(len(questions)):
+        question = questions[i]
+        answer = answers[i]
 
         if min_line_length <= len(question.split()) <= max_line_length:
             if min_line_length <= len(answer.split()) <= max_line_length:
 
-                short_answers.append(clean_answers[i])
-                short_questions.append(clean_questions[i])
-                short_movies.append(movie)
+                short_answers.append(answers[i])
+                short_questions.append(questions[i])
+                short_movies.append(movie_qa[i])
+                short_questions_speaker.append(questions_speaker[i])
+                short_answers_speaker.append(answers_speaker[i])
 
     if DEBUG:
         # Compare the number of lines we will use with the total number of
@@ -290,10 +237,13 @@ def build_data_utterances(lines, conv_lines, min_line_length=2,
         print("# of questions:", len(short_questions))
         print("# of answers:", len(short_answers))
         print("% of data used: {:.1f}%".format(
-            len(short_questions) / len(questions) * 100))
+                len(short_questions) / len(questions) * 100))
         print()
+    dataset = np.array(list(zip(short_questions, short_answers,
+                                short_questions_speaker,
+                                short_answers_speaker)))
 
-    return short_answers, short_questions, short_movies
+    return np.array(short_movies), dataset
 
 
 def create_speaker_tables(speaker_table_file):
@@ -301,15 +251,11 @@ def create_speaker_tables(speaker_table_file):
     ## TODO account for speaker only present in answers
 
     speaker_table = lookup_ops.index_table_from_file(
-        speaker_table_file, default_value=UNK_ID)
+            speaker_table_file, default_value=UNK_ID)
     return speaker_table
 
 
-def write_data(questions, answers, fold, output_dir):
+def write_data(data, input_type, fold, output_dir):
     # write the data
-
-
-    with open(output_dir + "/" + fold + '.answers', "w") as f:
-        f.write("\n".join(answers))
-    with open(output_dir + "/" + fold + '.questions', "w") as f:
-        f.write("\n".join(questions))
+    with open(output_dir + "/" + fold + '.' + input_type, "w") as f:
+        f.write("\n".join(data))

@@ -45,6 +45,8 @@ def add_arguments(parser):
     # network
     parser.add_argument("--num_units",
                         type=int, default=32, help="Network size.")
+    parser.add_argument("--num_units_speaker",
+                        type=int, default=32, help="Speaker embedding size.")
     parser.add_argument("--num_layers",
                         type=int, default=2,
                         help="Network depth.")
@@ -164,6 +166,12 @@ def add_arguments(parser):
     parser.add_argument("--tgt",
                         type=str, default=None,
                         help="Target suffix, e.g., de.")
+    parser.add_argument("--src_spk",
+                        type=str, default=None,
+                        help="Source speaker suffix, e.g., en.")
+    parser.add_argument("--tgt_spk",
+                        type=str, default=None,
+                        help="Target speaker suffix, e.g., de.")
     parser.add_argument("--train_prefix",
                         type=str, default=None,
                         help="Train prefix, expect files with src/tgt "
@@ -204,6 +212,17 @@ def add_arguments(parser):
                         type="bool", default=True,
                         help="Whether check special sos, eos, unk tokens "
                              "exist in the vocab files.")
+    # Speaker
+
+
+    parser.add_argument("--speaker_prefix",
+                        type=str, default=None,
+                        help="Speaker_file, no suffix added")
+
+    parser.add_argument("--embed_speaker_prefix",
+                        type=str, default=None,
+                        help="Pretrained embedding for speakers"
+                             "should be Glove formated txt files.")
 
     # Sequence lengths
     parser.add_argument("--src_max_len",
@@ -357,15 +376,20 @@ def create_hparams(flags):
         # Data
         src=flags.src,
         tgt=flags.tgt,
+        src_spk=flags.src_spk,
+        tgt_spk=flags.tgt_spk,
         train_prefix=flags.train_prefix,
         dev_prefix=flags.dev_prefix,
         test_prefix=flags.test_prefix,
         vocab_prefix=flags.vocab_prefix,
         embed_prefix=flags.embed_prefix,
+        speaker_prefix=flags.speaker_prefix,
+        embed_speaker_prefix=flags.embed_speaker_prefix,
         out_dir=flags.out_dir,
 
         # Networks
         num_units=flags.num_units,
+        num_units_speaker=flags.num_units_speaker,
         num_layers=flags.num_layers,  # Compatible
         num_encoder_layers=(flags.num_encoder_layers or flags.num_layers),
         num_decoder_layers=(flags.num_decoder_layers or flags.num_layers),
@@ -538,6 +562,34 @@ def extend_hparams(hparams):
 
         if tf.gfile.Exists(tgt_embed_file):
             hparams.tgt_embed_file = tgt_embed_file
+
+    ## Speakers
+    # Get vocab file names first
+    if hparams.speaker_prefix:
+        speaker_file = hparams.speaker_prefix
+    else:
+        raise ValueError("hparams.speaker_file must be provided.")
+
+    # Source vocab
+    speaker_size, speaker_file = vocab_utils.check_vocab(
+        speaker_file,
+        hparams.out_dir,
+        check_special_token=hparams.check_special_token,
+        sos=hparams.sos,
+        eos=hparams.eos,
+        unk=vocab_utils.UNK)
+
+    hparams.add_hparam("speaker_size", speaker_size)
+    hparams.add_hparam("speaker_file", speaker_file)
+
+    # Pretrained Embeddings:
+    hparams.add_hparam("spk_embed_file", "")
+    if hparams.embed_speaker_prefix:
+        spk_embed_file = hparams.embed_speaker_prefix
+
+        if tf.gfile.Exists(spk_embed_file):
+            hparams.spk_embed_file = spk_embed_file
+
 
     # Check out_dir
     if not tf.gfile.Exists(hparams.out_dir):

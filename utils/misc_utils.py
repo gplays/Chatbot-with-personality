@@ -140,15 +140,15 @@ def get_config_proto(hparams= None,log_device_placement=False,
                      num_intra_threads=0, num_inter_threads=0):
   try:
     log_device_placement = hparams.log_device_placement
-  finally:
+  except AttributeError:
     pass
   try:
     num_intra_threads = hparams.num_intra_threads
-  finally:
+  except AttributeError:
     pass
   try:
     num_inter_threads = hparams.num_inter_threads
-  finally:
+  except AttributeError:
     pass
 
   # GPU options:

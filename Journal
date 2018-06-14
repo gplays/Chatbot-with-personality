@@ -2,10 +2,12 @@ Data processing
 optimising library with intel
     Looking for a way to have latest tensorflow in conda env
 
-careful tile batch beamsearch with ustom function (because of attention)
+careful tile batch beamsearch with custom function (because of attention)
 sequence_length (in dynamic_rnn) for no padding
 parallel_iterations (dynaminc_rnn) for trade off Memory/speed
 swap_memory (for swapping to cpu)
 length penalty : [(5+sequence_lengths)/6]**penalty_factor (https://arxiv.org/abs/1609.08144)
 
 Use other tokenizer? https://github.com/google/sentencepiece
+
+Atention based on https://arxiv.org/pdf/1409.0473.pdf

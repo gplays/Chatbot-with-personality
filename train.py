@@ -44,16 +44,20 @@ class Trainer(object):
 
 
 def run_sample_decode(infer_model, infer_sess, model_dir, hparams,
-                      summary_writer, src_data, tgt_data):
+                      summary_writer, src_data, tgt_data,
+                      spk_src_data, spk_tgt_data):
     """Sample decode a random sentence from src_data."""
     with infer_model.graph.as_default():
         loaded_infer_model, global_step = model_helper.create_or_load_model(
-            infer_model.model, model_dir, infer_sess, "infer")
+                infer_model.model, model_dir, infer_sess, "infer")
 
     _sample_decode(loaded_infer_model, global_step, infer_sess, hparams,
                    infer_model.iterator, src_data, tgt_data,
                    infer_model.src_placeholder,
-                   infer_model.batch_size_placeholder, summary_writer)
+                   infer_model.batch_size_placeholder,
+                   infer_model.src_speaker_placeholder, spk_src_data,
+                   infer_model.tgt_speaker_placeholder, spk_tgt_data,
+                   summary_writer)
 
 
 def run_internal_eval(eval_model, eval_sess, model_dir, hparams, summary_writer,
@@ -61,13 +65,17 @@ def run_internal_eval(eval_model, eval_sess, model_dir, hparams, summary_writer,
     """Compute internal evaluation (perplexity) for both dev / test."""
     with eval_model.graph.as_default():
         loaded_eval_model, global_step = model_helper.create_or_load_model(
-            eval_model.model, model_dir, eval_sess, "eval")
+                eval_model.model, model_dir, eval_sess, "eval")
 
     dev_src_file = "%s.%s" % (hparams.dev_prefix, hparams.src)
     dev_tgt_file = "%s.%s" % (hparams.dev_prefix, hparams.tgt)
+    dev_src_spk_file = "%s.%s" % (hparams.dev_prefix, hparams.src_spk)
+    dev_tgt_spk_file = "%s.%s" % (hparams.dev_prefix, hparams.tgt_spk)
     dev_eval_iterator_feed_dict = {
         eval_model.src_file_placeholder: dev_src_file,
-        eval_model.tgt_file_placeholder: dev_tgt_file
+        eval_model.tgt_file_placeholder: dev_tgt_file,
+        eval_model.src_spk_file_placeholder: dev_src_spk_file,
+        eval_model.tgt_spk_file_placeholder: dev_tgt_spk_file,
         }
 
     dev_ppl = _internal_eval(loaded_eval_model, global_step, eval_sess,
@@ -77,9 +85,13 @@ def run_internal_eval(eval_model, eval_sess, model_dir, hparams, summary_writer,
     if use_test_set and hparams.test_prefix:
         test_src_file = "%s.%s" % (hparams.test_prefix, hparams.src)
         test_tgt_file = "%s.%s" % (hparams.test_prefix, hparams.tgt)
+        test_src_spk_file = "%s.%s" % (hparams.test_prefix, hparams.src_spk)
+        test_tgt_spk_file = "%s.%s" % (hparams.test_prefix, hparams.tgt_spk)
         test_eval_iterator_feed_dict = {
             eval_model.src_file_placeholder: test_src_file,
-            eval_model.tgt_file_placeholder: test_tgt_file
+            eval_model.tgt_file_placeholder: test_tgt_file,
+            eval_model.src_spk_file_placeholder: test_src_spk_file,
+            eval_model.tgt_spk_file_placeholder: test_tgt_spk_file
             }
         test_ppl = _internal_eval(loaded_eval_model, global_step, eval_sess,
                                   eval_model.iterator,
@@ -94,7 +106,7 @@ def run_external_eval(infer_model, infer_sess, model_dir, hparams,
     """Compute external evaluation (bleu, rouge, etc.) for both dev / test."""
     with infer_model.graph.as_default():
         loaded_infer_model, global_step = model_helper.create_or_load_model(
-            infer_model.model, model_dir, infer_sess, "infer")
+                infer_model.model, model_dir, infer_sess, "infer")
 
     dev_src_file = "%s.%s" % (hparams.dev_prefix, hparams.src)
     dev_tgt_file = "%s.%s" % (hparams.dev_prefix, hparams.tgt)
@@ -103,17 +115,17 @@ def run_external_eval(infer_model, infer_sess, model_dir, hparams,
         infer_model.batch_size_placeholder: hparams.infer_batch_size,
         }
     dev_scores = _external_eval(
-        loaded_infer_model,
-        global_step,
-        infer_sess,
-        hparams,
-        infer_model.iterator,
-        dev_infer_iterator_feed_dict,
-        dev_tgt_file,
-        "dev",
-        summary_writer,
-        save_on_best=save_best_dev,
-        avg_ckpts=avg_ckpts)
+            loaded_infer_model,
+            global_step,
+            infer_sess,
+            hparams,
+            infer_model.iterator,
+            dev_infer_iterator_feed_dict,
+            dev_tgt_file,
+            "dev",
+            summary_writer,
+            save_on_best=save_best_dev,
+            avg_ckpts=avg_ckpts)
 
     test_scores = None
     if use_test_set and hparams.test_prefix:
@@ -124,17 +136,17 @@ def run_external_eval(infer_model, infer_sess, model_dir, hparams,
             infer_model.batch_size_placeholder: hparams.infer_batch_size,
             }
         test_scores = _external_eval(
-            loaded_infer_model,
-            global_step,
-            infer_sess,
-            hparams,
-            infer_model.iterator,
-            test_infer_iterator_feed_dict,
-            test_tgt_file,
-            "test",
-            summary_writer,
-            save_on_best=False,
-            avg_ckpts=avg_ckpts)
+                loaded_infer_model,
+                global_step,
+                infer_sess,
+                hparams,
+                infer_model.iterator,
+                test_infer_iterator_feed_dict,
+                test_tgt_file,
+                "test",
+                summary_writer,
+                save_on_best=False,
+                avg_ckpts=avg_ckpts)
     return dev_scores, test_scores, global_step
 
 
@@ -146,31 +158,34 @@ def run_avg_external_eval(infer_model, infer_sess, model_dir, hparams,
         # Convert VariableName:0 to VariableName.
         global_step_name = infer_model.model.global_step.name.split(":")[0]
         avg_model_dir = model_helper.avg_checkpoints(
-            model_dir, hparams.num_keep_ckpts, global_step, global_step_name)
+                model_dir, hparams.num_keep_ckpts, global_step,
+                global_step_name)
 
         if avg_model_dir:
             avg_dev_scores, avg_test_scores, _ = run_external_eval(
-                infer_model,
-                infer_sess,
-                avg_model_dir,
-                hparams,
-                summary_writer,
-                avg_ckpts=True)
+                    infer_model,
+                    infer_sess,
+                    avg_model_dir,
+                    hparams,
+                    summary_writer,
+                    avg_ckpts=True)
 
     return avg_dev_scores, avg_test_scores
 
 
 def run_full_eval(model_dir, infer_model, infer_sess, eval_model, eval_sess,
                   hparams, summary_writer, sample_src_data, sample_tgt_data,
+                  sample_spk_src_data, sample_spk_tgt_data,
                   avg_ckpts=False):
     """Wrapper for running sample_decode, internal_eval and external_eval."""
     run_sample_decode(infer_model, infer_sess, model_dir, hparams,
                       summary_writer,
-                      sample_src_data, sample_tgt_data)
+                      sample_src_data, sample_tgt_data,
+                      sample_spk_src_data, sample_spk_tgt_data)
     dev_ppl, test_ppl = run_internal_eval(
-        eval_model, eval_sess, model_dir, hparams, summary_writer)
+            eval_model, eval_sess, model_dir, hparams, summary_writer)
     dev_scores, test_scores, global_step = run_external_eval(
-        infer_model, infer_sess, model_dir, hparams, summary_writer)
+            infer_model, infer_sess, model_dir, hparams, summary_writer)
 
     metrics = {
         "dev_ppl": dev_ppl,
@@ -182,8 +197,8 @@ def run_full_eval(model_dir, infer_model, infer_sess, eval_model, eval_sess,
     avg_dev_scores, avg_test_scores = None, None
     if avg_ckpts:
         avg_dev_scores, avg_test_scores = run_avg_external_eval(
-            infer_model, infer_sess, model_dir, hparams, summary_writer,
-            global_step)
+                infer_model, infer_sess, model_dir, hparams, summary_writer,
+                global_step)
         metrics["avg_dev_scores"] = avg_dev_scores
         metrics["avg_test_scores"] = avg_test_scores
 
@@ -229,12 +244,13 @@ def update_stats(stats, start_time, step_result):
 def print_step_info(prefix, global_step, info, result_summary, log_f):
     """Print all info at the current global step."""
     utils.print_out(
-        "%sstep %d lr %g step-time %.2fs wps %.2fK ppl %.2f gN %.2f %s, %s" %
-        (prefix, global_step, info["learning_rate"], info["avg_step_time"],
-         info["speed"], info["train_ppl"], info["avg_grad_norm"],
-         result_summary,
-         time.ctime()),
-        log_f)
+            "%sstep %d lr %g step-time %.2fs wps %.2fK ppl %.2f gN %.2f %s, "
+            "%s" %
+            (prefix, global_step, info["learning_rate"], info["avg_step_time"],
+             info["speed"], info["train_ppl"], info["avg_grad_norm"],
+             result_summary,
+             time.ctime()),
+            log_f)
 
 
 def process_stats(stats, info, global_step, steps_per_stats, log_f):
@@ -262,7 +278,7 @@ def before_train(loaded_train_model, train_model, train_sess, global_step,
     info = {"train_ppl": 0.0, "speed": 0.0, "avg_step_time": 0.0,
             "avg_grad_norm": 0.0,
             "learning_rate": loaded_train_model.learning_rate.eval(
-                session=train_sess)}
+                    session=train_sess)}
     start_train_time = time.time()
     utils.print_out("# Start step %d, lr %g, %s" %
                     (global_step, info["learning_rate"], time.ctime()), log_f)
@@ -271,8 +287,8 @@ def before_train(loaded_train_model, train_model, train_sess, global_step,
     skip_count = hparams.batch_size * hparams.epoch_step
     utils.print_out("# Init train iterator, skipping %d elements" % skip_count)
     train_sess.run(
-        train_model.iterator.initializer,
-        feed_dict={train_model.skip_count_placeholder: skip_count})
+            train_model.iterator.initializer,
+            feed_dict={train_model.skip_count_placeholder: skip_count})
 
     return stats, info, start_train_time
 
@@ -295,7 +311,7 @@ def train(hparams, scope=None, target_session=""):
         model_creator = nmt_model.Model
     else:  # Attention
         if (hparams.encoder_type == "gnmt" or
-                    hparams.attention_architecture in ["gnmt", "gnmt_v2"]):
+                hparams.attention_architecture in ["gnmt", "gnmt_v2"]):
             model_creator = gnmt_model.GNMTModel
         elif hparams.attention_architecture == "standard":
             model_creator = attention_model.AttentionModel
@@ -312,6 +328,10 @@ def train(hparams, scope=None, target_session=""):
     dev_tgt_file = "%s.%s" % (hparams.dev_prefix, hparams.tgt)
     sample_src_data = inference.load_data(dev_src_file)
     sample_tgt_data = inference.load_data(dev_tgt_file)
+    dev_spk_src_file = "%s.%s" % (hparams.dev_prefix, hparams.src_spk)
+    dev_spk_tgt_file = "%s.%s" % (hparams.dev_prefix, hparams.tgt_spk)
+    sample_spk_src_data = inference.load_data(dev_spk_src_file)
+    sample_spk_tgt_data = inference.load_data(dev_spk_tgt_file)
 
     summary_name = "train_log"
     model_dir = hparams.out_dir
@@ -323,30 +343,31 @@ def train(hparams, scope=None, target_session=""):
 
     # TensorFlow model
     config_proto = utils.get_config_proto(
-        log_device_placement=log_device_placement,
-        num_intra_threads=hparams.num_intra_threads,
-        num_inter_threads=hparams.num_inter_threads)
+            log_device_placement=log_device_placement,
+            num_intra_threads=hparams.num_intra_threads,
+            num_inter_threads=hparams.num_inter_threads)
     train_sess = tf.Session(
-        target=target_session, config=config_proto, graph=train_model.graph)
+            target=target_session, config=config_proto, graph=train_model.graph)
     eval_sess = tf.Session(
-        target=target_session, config=config_proto, graph=eval_model.graph)
+            target=target_session, config=config_proto, graph=eval_model.graph)
     infer_sess = tf.Session(
-        target=target_session, config=config_proto, graph=infer_model.graph)
+            target=target_session, config=config_proto, graph=infer_model.graph)
 
     with train_model.graph.as_default():
         loaded_train_model, global_step = model_helper.create_or_load_model(
-            train_model.model, model_dir, train_sess, "train")
+                train_model.model, model_dir, train_sess, "train")
 
     # Summary writer
     summary_writer = tf.summary.FileWriter(
-        os.path.join(out_dir, summary_name), train_model.graph)
+            os.path.join(out_dir, summary_name), train_model.graph)
 
     # First evaluation
     run_full_eval(
-        model_dir, infer_model, infer_sess,
-        eval_model, eval_sess, hparams,
-        summary_writer, sample_src_data,
-        sample_tgt_data, avg_ckpts)
+            model_dir, infer_model, infer_sess,
+            eval_model, eval_sess, hparams,
+            summary_writer, sample_src_data,
+            sample_tgt_data,
+                  sample_spk_src_data, sample_spk_tgt_data,avg_ckpts)
 
     last_stats_step = global_step
     last_eval_step = global_step
@@ -354,8 +375,8 @@ def train(hparams, scope=None, target_session=""):
 
     # This is the training loop.
     stats, info, start_train_time = before_train(
-        loaded_train_model, train_model, train_sess, global_step, hparams,
-        log_f)
+            loaded_train_model, train_model, train_sess, global_step, hparams,
+            log_f)
     while global_step < num_train_steps:
         ### Run a step ###
         start_time = time.time()
@@ -366,10 +387,12 @@ def train(hparams, scope=None, target_session=""):
             # Finished going through the training dataset.  Go to next epoch.
             hparams.epoch_step = 0
             utils.print_out(
-                "# Finished an epoch, step %d. Perform external evaluation" %
-                global_step)
+                    "# Finished an epoch, step %d. Perform external "
+                    "evaluation" %
+                    global_step)
             run_sample_decode(infer_model, infer_sess, model_dir, hparams,
-                              summary_writer, sample_src_data, sample_tgt_data)
+                              summary_writer, sample_src_data, sample_tgt_data,
+                              sample_spk_src_data, sample_spk_tgt_data)
             run_external_eval(infer_model, infer_sess, model_dir, hparams,
                               summary_writer)
 
@@ -379,13 +402,13 @@ def train(hparams, scope=None, target_session=""):
                                       summary_writer, global_step)
 
             train_sess.run(
-                train_model.iterator.initializer,
-                feed_dict={train_model.skip_count_placeholder: 0})
+                    train_model.iterator.initializer,
+                    feed_dict={train_model.skip_count_placeholder: 0})
             continue
 
         # Process step_result, accumulate stats, and write summary
         global_step, info["learning_rate"], step_summary = update_stats(
-            stats, start_time, step_result)
+                stats, start_time, step_result)
         summary_writer.add_summary(step_summary, global_step)
 
         # Once in a while, we print statistics.
@@ -411,33 +434,35 @@ def train(hparams, scope=None, target_session=""):
 
             # Save checkpoint
             loaded_train_model.saver.save(
-                train_sess,
-                os.path.join(out_dir, "translate.ckpt"),
-                global_step=global_step)
+                    train_sess,
+                    os.path.join(out_dir, "translate.ckpt"),
+                    global_step=global_step)
 
             # Evaluate on dev/test
             run_sample_decode(infer_model, infer_sess,
                               model_dir, hparams, summary_writer,
                               sample_src_data,
-                              sample_tgt_data)
+                              sample_tgt_data,
+                              sample_spk_src_data, sample_spk_tgt_data)
             run_internal_eval(
-                eval_model, eval_sess, model_dir, hparams, summary_writer)
+                    eval_model, eval_sess, model_dir, hparams, summary_writer)
 
         if global_step - last_external_eval_step >= steps_per_external_eval:
             last_external_eval_step = global_step
 
             # Save checkpoint
             loaded_train_model.saver.save(
-                train_sess,
-                os.path.join(out_dir, "translate.ckpt"),
-                global_step=global_step)
+                    train_sess,
+                    os.path.join(out_dir, "translate.ckpt"),
+                    global_step=global_step)
             run_sample_decode(infer_model, infer_sess,
                               model_dir, hparams, summary_writer,
                               sample_src_data,
-                              sample_tgt_data)
+                              sample_tgt_data,
+                              sample_spk_src_data, sample_spk_tgt_data)
             run_external_eval(
-                infer_model, infer_sess, model_dir,
-                hparams, summary_writer)
+                    infer_model, infer_sess, model_dir,
+                    hparams, summary_writer)
 
             if avg_ckpts:
                 run_avg_external_eval(infer_model, infer_sess, model_dir,
@@ -446,14 +471,16 @@ def train(hparams, scope=None, target_session=""):
 
     # Done training
     loaded_train_model.saver.save(
-        train_sess,
-        os.path.join(out_dir, "translate.ckpt"),
-        global_step=global_step)
+            train_sess,
+            os.path.join(out_dir, "translate.ckpt"),
+            global_step=global_step)
 
     (result_summary, _, final_eval_metrics) = (
         run_full_eval(
-            model_dir, infer_model, infer_sess, eval_model, eval_sess, hparams,
-            summary_writer, sample_src_data, sample_tgt_data, avg_ckpts))
+                model_dir, infer_model, infer_sess, eval_model, eval_sess,
+                hparams,
+                summary_writer, sample_src_data, sample_tgt_data,
+                sample_spk_src_data, sample_spk_tgt_data,avg_ckpts))
     print_step_info("# Final, ", global_step, info, result_summary, log_f)
     utils.print_time("# Done training!", start_train_time)
 
@@ -463,11 +490,12 @@ def train(hparams, scope=None, target_session=""):
     for metric in hparams.metrics:
         best_model_dir = getattr(hparams, "best_" + metric + "_dir")
         summary_writer = tf.summary.FileWriter(
-            os.path.join(best_model_dir, summary_name), infer_model.graph)
+                os.path.join(best_model_dir, summary_name), infer_model.graph)
         result_summary, best_global_step, _ = run_full_eval(
-            best_model_dir, infer_model, infer_sess, eval_model, eval_sess,
-            hparams,
-            summary_writer, sample_src_data, sample_tgt_data)
+                best_model_dir, infer_model, infer_sess, eval_model, eval_sess,
+                hparams,
+                summary_writer, sample_src_data, sample_tgt_data,
+                    sample_spk_src_data, sample_spk_tgt_data,)
         print_step_info("# Best %s, " % metric, best_global_step, info,
                         result_summary, log_f)
         summary_writer.close()
@@ -475,10 +503,13 @@ def train(hparams, scope=None, target_session=""):
         if avg_ckpts:
             best_model_dir = getattr(hparams, "avg_best_" + metric + "_dir")
             summary_writer = tf.summary.FileWriter(
-                os.path.join(best_model_dir, summary_name), infer_model.graph)
+                    os.path.join(best_model_dir, summary_name),
+                    infer_model.graph)
             result_summary, best_global_step, _ = run_full_eval(
-                best_model_dir, infer_model, infer_sess, eval_model, eval_sess,
-                hparams, summary_writer, sample_src_data, sample_tgt_data)
+                    best_model_dir, infer_model, infer_sess, eval_model,
+                    eval_sess,
+                    hparams, summary_writer, sample_src_data, sample_tgt_data,
+                    sample_spk_src_data, sample_spk_tgt_data,)
             print_step_info("# Averaged Best %s, " % metric, best_global_step,
                             info,
                             result_summary, log_f)
@@ -526,7 +557,12 @@ def _internal_eval(model, global_step, sess, iterator, iterator_feed_dict,
 
 def _sample_decode(model, global_step, sess, hparams, iterator, src_data,
                    tgt_data, iterator_src_placeholder,
-                   iterator_batch_size_placeholder, summary_writer):
+                   iterator_batch_size_placeholder,
+                   iterator_spk_src_placeholder,
+                   spk_src_data,
+                   iterator_spk_tgt_placeholder,
+                   spk_tgt_data,
+                   summary_writer):
     """Pick a sentence and decode."""
     decode_id = random.randint(0, len(src_data) - 1)
     utils.print_out("  # %d" % decode_id)
@@ -534,6 +570,8 @@ def _sample_decode(model, global_step, sess, hparams, iterator, src_data,
     iterator_feed_dict = {
         iterator_src_placeholder: [src_data[decode_id]],
         iterator_batch_size_placeholder: 1,
+        iterator_spk_src_placeholder: [spk_src_data[decode_id]],
+        iterator_spk_tgt_placeholder: [spk_tgt_data[decode_id]],
         }
     sess.run(iterator.initializer, feed_dict=iterator_feed_dict)
 
@@ -544,10 +582,10 @@ def _sample_decode(model, global_step, sess, hparams, iterator, src_data,
         nmt_outputs = nmt_outputs[0]
 
     translation = nmt_utils.get_translation(
-        nmt_outputs,
-        sent_id=0,
-        tgt_eos=hparams.eos,
-        subword_option=hparams.subword_option)
+            nmt_outputs,
+            sent_id=0,
+            tgt_eos=hparams.eos,
+            subword_option=hparams.subword_option)
     utils.print_out("    src: %s" % src_data[decode_id])
     utils.print_out("    ref: %s" % tgt_data[decode_id])
     utils.print_out(b"    nmt: " + translation)
@@ -574,16 +612,16 @@ def _external_eval(model, global_step, sess, hparams, iterator,
 
     output = os.path.join(out_dir, "output_%s" % label)
     scores = nmt_utils.decode_and_evaluate(
-        label,
-        model,
-        sess,
-        output,
-        ref_file=tgt_file,
-        metrics=hparams.metrics,
-        subword_option=hparams.subword_option,
-        beam_width=hparams.beam_width,
-        tgt_eos=hparams.eos,
-        decode=decode)
+            label,
+            model,
+            sess,
+            output,
+            ref_file=tgt_file,
+            metrics=hparams.metrics,
+            subword_option=hparams.subword_option,
+            beam_width=hparams.beam_width,
+            tgt_eos=hparams.eos,
+            decode=decode)
     # Save on best metrics
     if decode:
         for metric in hparams.metrics:
@@ -600,10 +638,10 @@ def _external_eval(model, global_step, sess, hparams, iterator,
                                                          best_metric_label):
                 setattr(hparams, best_metric_label, scores[metric])
                 model.saver.save(
-                    sess,
-                    os.path.join(
-                        getattr(hparams, best_metric_label + "_dir"),
-                        "translate.ckpt"),
-                    global_step=model.global_step)
+                        sess,
+                        os.path.join(
+                                getattr(hparams, best_metric_label + "_dir"),
+                                "translate.ckpt"),
+                        global_step=model.global_step)
         utils.save_hparams(out_dir, hparams)
     return scores

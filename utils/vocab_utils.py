@@ -73,7 +73,7 @@ def check_vocab(vocab_file, out_dir, check_special_token=True, sos=None,
                         f.write("%s\n" % word)
                 vocab_file = new_vocab_file
     else:
-        print(os.path.join(out_dir,os.path.basename(vocab_file)))
+        print(os.path.join(out_dir, os.path.basename(vocab_file)))
         print(vocab_file)
         raise ValueError("vocab_file '{}' does not exist.".format(vocab_file))
 
@@ -84,12 +84,12 @@ def check_vocab(vocab_file, out_dir, check_special_token=True, sos=None,
 def create_vocab_tables(src_vocab_file, tgt_vocab_file, share_vocab):
     """Creates vocab tables for src_vocab_file and tgt_vocab_file."""
     src_vocab_table = lookup_ops.index_table_from_file(
-        src_vocab_file, default_value=UNK_ID)
+            src_vocab_file, default_value=UNK_ID)
     if share_vocab:
         tgt_vocab_table = src_vocab_table
     else:
         tgt_vocab_table = lookup_ops.index_table_from_file(
-            tgt_vocab_file, default_value=UNK_ID)
+                tgt_vocab_file, default_value=UNK_ID)
     return src_vocab_table, tgt_vocab_table
 
 
@@ -119,13 +119,13 @@ def load_embed_txt(embed_file):
             emb_dict[word] = vec
             if emb_size:
                 assert emb_size == len(
-                    vec), "All embedding size should be same."
+                        vec), "All embedding size should be same."
             else:
                 emb_size = len(vec)
     return emb_dict, emb_size
 
 
-def build_vocab_file(questions, answers, vocab_file, out_dir, threshold = 10):
+def build_vocab_file(questions, answers, vocab_file, out_dir, threshold=10):
     # Create a dictionary for the frequency of the vocabulary
     vocab = {}
     for question in questions:
@@ -145,7 +145,7 @@ def build_vocab_file(questions, answers, vocab_file, out_dir, threshold = 10):
     # Remove rare words from the vocabulary.
     # We will aim to replace fewer than 5% of words with <UNK>
     filtered_vocab = [word for word, count in vocab.items()
-                      if count >= threshold ]
+                      if count >= threshold]
 
     print("Size of total vocab:", len(vocab))
     print("Size of vocab we will use:", len(filtered_vocab))
@@ -165,22 +165,15 @@ def build_vocab_file(questions, answers, vocab_file, out_dir, threshold = 10):
     return new_vocab_file
 
 
-def build_speaker_file(questions, answers, speaker_file, out_dir):
-
+def build_speaker_file(src_speakers, tgt_speaker, speaker_file, out_dir):
     speakers = {}
-    for speaker in questions:
+    for speaker in src_speakers:
         if speaker[0] not in speakers:
             speakers[speaker[0]] = 1
 
-    for speaker in answers:
+    for speaker in tgt_speaker:
         if speaker[0] not in speakers:
             speakers[speaker[0]] = 1
 
-    with open(out_dir+"/"+speaker_file,"w") as f:
+    with open(out_dir + "/" + speaker_file, "w") as f:
         f.write("\n".join(speakers.keys()))
-
-
-
-
-
-
